@@ -1,0 +1,1315 @@
+<!DOCTYPE html>
+<html lang="fa">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>دیکشنری زیست‌شناسی</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- صفحه ورود -->
+  <div id="loginPage" class="login-page">
+    <div class="login-container">
+      <h2>🔐 ورود به سیستم</h2>
+      <form id="loginForm">
+        <div class="form-group">
+          <label for="username">نام کاربری:</label>
+          <input type="text" id="username" name="username" required>
+        </div>
+        <div class="form-group">
+          <label for="password">رمز عبور:</label>
+          <input type="password" id="password" name="password" required>
+        </div>
+        <button type="submit">ورود</button>
+        <p id="loginError" class="error-msg"></p>
+      </form>
+    </div>
+  </div>
+
+  <!-- صفحه اصلی -->
+  <div id="mainPage" class="main-page" style="display:flex;">
+    <header>
+      <div class="header-content">
+        <h1>📚 دیکشنری زیست‌شناسی</h1>
+        <div class="header-controls">
+          <button type="button" id="loginBtn" class="login-btn">ورود</button>
+          <button type="button" id="logoutBtn" class="logout-btn" style="display:none;">خروج</button>
+        </div>
+      </div>
+    </header>
+
+    <nav role="navigation">
+      <ul>
+        <li><a href="#" class="nav-link active" id="grade10">پایه دهم</a></li>
+        <li><a href="#" class="nav-link" id="grade11">پایه یازدهم</a></li>
+        <li><a href="#" class="nav-link" id="addWord" style="display:none;">➕ افزودن کلمه</a></li>
+      </ul>
+    </nav>
+
+    <section class="search-box" id="searchSection">
+      <input type="text" id="searchInput" name="search" aria-label="جست‌وجوی واژه" placeholder="🔍 جست‌وجوی واژه...">
+    </section>
+
+    <!-- قسمت افزودن کلمه -->
+    <section class="add-word-section" id="addWordSection" style="display:none;">
+      <h2>افزودن کلمه جدید</h2>
+      <form id="addWordForm">
+        <div class="form-group">
+          <label for="newTerm">اصطلاح انگلیسی:</label>
+          <input type="text" id="newTerm" name="newTerm" required>
+        </div>
+        <div class="form-group">
+          <label for="newMeaning">معنی فارسی:</label>
+          <input type="text" id="newMeaning" name="newMeaning" required>
+        </div>
+        <div class="form-group">
+          <label for="newGrade">پایه تحصیلی:</label>
+          <select id="newGrade" name="newGrade" required>
+            <option value="grade10">پایه دهم</option>
+            <option value="grade11">پایه یازدهم</option>
+          </select>
+        </div>
+        <button type="submit">افزودن</button>
+        <button type="button" id="cancelAddBtn">انصراف</button>
+        <p id="addWordMsg" class="success-msg"></p>
+      </form>
+    </section>
+
+    <section class="word-list" id="wordList">
+      <!-- کلمات اینجا نمایش داده می‌شن -->
+    </section>
+
+    <footer>
+      <p>طراحی شده با ❤️ برای دانش‌آموزان زیست‌شناسی</p>
+    </footer>
+  </div>
+
+  <script>
+    // متغیرهای سراسری
+    let currentGrade = "grade10";
+
+    // فهرست کاربران مجاز (role: 'editor' می‌تواند کلمه اضافه کند)
+    const users = [
+      { username: "admin", password: "6789", role: "editor" },
+      { username: "teacher1", password: "1234", role: "editor" },
+      { username: "viewer1", password: "0000", role: "viewer" }
+    ];
+
+    // عناصر DOM
+    const loginPage = document.getElementById("loginPage");
+    const mainPage = document.getElementById("mainPage");
+    const loginForm = document.getElementById("loginForm");
+    const loginError = document.getElementById("loginError");
+    const logoutBtn = document.getElementById("logoutBtn");
+    const loginBtn = document.getElementById("loginBtn");
+    const addWordLink = document.getElementById("addWord");
+    const addWordSection = document.getElementById("addWordSection");
+    const addWordForm = document.getElementById("addWordForm");
+    const cancelAddBtn = document.getElementById("cancelAddBtn");
+    const addWordMsg = document.getElementById("addWordMsg");
+    const searchSection = document.getElementById("searchSection");
+    const wordList = document.getElementById("wordList");
+    const searchInput = document.getElementById("searchInput");
+
+    // حالت اولیه: صفحه اصلی برای همه نمایش داده می‌شود، فرم ورود باید پنهان باشد
+    loginPage.style.display = "none";
+    addWordLink.style.display = "none"; // پیش‌فرض فقط برای ویرایش‌گرها ظاهر می‌شود
+
+    // بروزرسانی رابط بر اساس وضعیت ورود
+    function updateAuthUI() {
+      const isLoggedIn = sessionStorage.getItem("isLoggedIn") === "true";
+      const role = sessionStorage.getItem("role");
+
+      if (isLoggedIn) {
+        loginBtn.style.display = "none";
+        logoutBtn.style.display = "inline-block";
+        if (role === "editor") {
+          addWordLink.style.display = "";
+        } else {
+          addWordLink.style.display = "none";
+        }
+      } else {
+        loginBtn.style.display = "inline-block";
+        logoutBtn.style.display = "none";
+        addWordLink.style.display = "none";
+      }
+    }
+
+    // بررسی ورود قبلی هنگام بارگذاری
+    window.addEventListener("load", () => {
+      updateAuthUI();
+      setActiveListForGrade(currentGrade);
+    });
+
+    // باز کردن فرم ورود به صورت مودال
+    loginBtn.addEventListener("click", () => {
+      loginPage.style.display = "flex";
+      loginError.textContent = "";
+    });
+
+    // فرم ورود
+    loginForm.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const username = document.getElementById("username").value.trim();
+      const password = document.getElementById("password").value.trim();
+
+      const user = users.find(u => u.username === username && u.password === password);
+      if (user) {
+        sessionStorage.setItem("isLoggedIn", "true");
+        sessionStorage.setItem("username", user.username);
+        sessionStorage.setItem("role", user.role);
+        loginError.textContent = "";
+        loginPage.style.display = "none";
+        updateAuthUI();
+      } else {
+        loginError.textContent = "نام کاربری یا رمز عبور اشتباه است!";
+        loginError.style.color = "#d32f2f";
+      }
+    });
+
+    // نمایش صفحه اصلی (در این نسخه صفحه اصلی همیشه باز است؛ تابع برای سازگاری نگه داشته شده)
+    function showMainPage() {
+      loginPage.style.display = "none";
+      mainPage.style.display = "flex";
+      displayWords(words[currentGrade]);
+      updateAuthUI();
+    }
+
+    // خروج
+    logoutBtn.addEventListener("click", () => {
+      sessionStorage.removeItem("isLoggedIn");
+      sessionStorage.removeItem("username");
+      sessionStorage.removeItem("role");
+      document.getElementById("username").value = "";
+      document.getElementById("password").value = "";
+      addWordSection.style.display = "none";
+      searchSection.style.display = "block";
+      updateAuthUI();
+    });
+
+    // رویدادهای ناوبری
+    const navLinks = document.querySelectorAll(".nav-link");
+    // لیست فعلی که در صفحه نمایش داده می‌شود (برای جستجو استفاده می‌شود)
+    // مقداردهی اولیه خالی — `words` بعداً تعریف می‌شود، بنابراین به آن قبل از بارگذاری ارجاع ندهیم
+    let activeList = [];
+
+    function setActiveListForGrade(grade) {
+      // اگر دو پایه بسیاری از واژه‌ها را مشترک داشته باشند، اینجا می‌توانیم موارد تکراری را حذف کنیم
+      if (grade === "grade10") {
+        // نمایش تمام واژه‌های پایه 10 (در صورت نیاز می‌توان حذف کلمات مشترک با پایه11 اضافه کرد)
+        activeList = words.grade10.slice();
+      } else if (grade === "grade11") {
+        // حذف واژه‌هایی که دقیقا در پایه10 وجود دارند تا اختلاف دو لیست روشن باشد
+        activeList = words.grade11.filter(w11 => !words.grade10.some(w10 => w10.term === w11.term));
+        // اگر پس از حذف، لیست خالی شد، از لیست کامل grade11 استفاده کن (تا چیزی نمایش داده شود)
+        if (activeList.length === 0) activeList = words.grade11.slice();
+      } else {
+        activeList = [];
+      }
+      displayWords(activeList);
+    }
+
+    navLinks.forEach(link => {
+      link.addEventListener("click", (e) => {
+        e.preventDefault();
+        navLinks.forEach(l => l.classList.remove("active"));
+        link.classList.add("active");
+        addWordSection.style.display = "none";
+        searchSection.style.display = "block";
+
+        if (link.id === "grade10") {
+          currentGrade = "grade10";
+          setActiveListForGrade("grade10");
+        } else if (link.id === "grade11") {
+          currentGrade = "grade11";
+          setActiveListForGrade("grade11");
+        } else if (link.id === "addWord") {
+          addWordSection.style.display = "block";
+          searchSection.style.display = "none";
+          wordList.innerHTML = "";
+        }
+      });
+    });
+
+    // افزودن کلمه جدید
+    addWordForm.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const newTerm = document.getElementById("newTerm").value.trim();
+      const newMeaning = document.getElementById("newMeaning").value.trim();
+      const newGrade = document.getElementById("newGrade").value;
+
+      if (newTerm && newMeaning) {
+        words[newGrade].push({ term: newTerm, meaning: newMeaning });
+        // save changes so they persist after reload
+        saveWordsToStorage();
+        addWordMsg.textContent = "✅ کلمه با موفقیت افزوده شد!";
+        addWordMsg.style.color = "#4caf50";
+        document.getElementById("newTerm").value = "";
+        document.getElementById("newMeaning").value = "";
+        setTimeout(() => {
+          addWordMsg.textContent = "";
+          addWordSection.style.display = "none";
+          searchSection.style.display = "block";
+          currentGrade = newGrade;
+          navLinks.forEach(l => l.classList.remove("active"));
+          document.getElementById(newGrade).classList.add("active");
+          setActiveListForGrade(newGrade);
+        }, 1500);
+      }
+    });
+
+    // انصراف
+    cancelAddBtn.addEventListener("click", () => {
+      addWordSection.style.display = "none";
+      searchSection.style.display = "block";
+      addWordMsg.textContent = "";
+      navLinks.forEach(l => l.classList.remove("active"));
+      document.getElementById("grade10").classList.add("active");
+      currentGrade = "grade10";
+      setActiveListForGrade("grade10");
+    });
+
+    const words = {
+      grade10: [
+        { term: "Cell", meaning: "سلول" },
+        { term: "Tissue", meaning: "بافت" },
+        { term: "Organ", meaning: "اندام" },
+        { term: "Pancreatic juice", meaning: "شیره‌ی لوزالمعده" },
+        { term: "Bicarbonate", meaning: "بیکربنات" },
+        { term: "Protease", meaning: "پروتئاز" },
+        { term: "Small intestine", meaning: "روده‌ی باریک" },
+        { term: "Stomach acid", meaning: "اسید معده" },
+        { term: "Twelve", meaning: "دوازدهه" },
+        { term: "Trypsin", meaning: "تریپسین" },
+        { term: "Protein", meaning: "پروتئین" },
+        { term: "Peptide bond", meaning: "پیوند پپتیدی" },
+        { term: "Carboxypeptidase", meaning: "کربوکسی پپتیداز" },
+{ term: "Lipase", meaning: "لیپاز" },
+{ term: "Glycerol", meaning: "گلیسرول" },
+{ term: "Fatty acid", meaning: "اسید چرب" },
+{ term: "Lipid", meaning: "لیپید" },
+{ term: "Phospholipase", meaning: "فسفولیپاز" },
+{ term: "Phospholipid", meaning: "فسفولیپید" },
+{ term: "Amylase", meaning: "آمیلاز" },
+{ term: "Starch", meaning: "نشاسته" },
+{ term: "Glycogen", meaning: "گلیکوژن" },
+{ term: "Monosaccharide", meaning: "مونو ساکارید" },
+{ term: "Disaccharide", meaning: "دی ساکارید" },
+{ term: "Trisaccharide", meaning: "تری ساکارید" },
+{ term: "Nuclease", meaning: "نوکلئاز" },
+{ term: "Nucleic acid", meaning: "نوکلئیک اسید" },
+{ term: "Carbohydrate", meaning: "کربوهیدرات" },
+{ term: "Digestion", meaning: "گوارش" },
+{ term: "Hydrolysis", meaning: "هیدرولیز" },
+{ term: "Macromolecules", meaning: "مولکول‌های درشت" },
+{ term: "Cellulose", meaning: "سلولز" },
+{ term: "Amino acid", meaning: "آمینو اسید" },
+{ term: "Triglyceride", meaning: "تری گلیسیرید" },
+{ term: "Gallbladder", meaning: "کیسه صفرا" },
+{ term: "Digestive tract", meaning: "لوله گوارش" },
+{ term: "Sphincter", meaning: "بنداره" },
+{ term: "Liver", meaning: "کبد" },
+{ term: "Esophagus", meaning: "مری" },
+{ term: "Stomach", meaning: "معده" },
+{ term: "Pancreas", meaning: "لوزالمعده" },
+{ term: "Large intestine", meaning: "روده بزرگ" },
+{ term: "Rectum", meaning: "راست‌روده" },
+{ term: "Bladder", meaning: "مخرج" },
+{ term: "Loose connective tissue", meaning: "بافت پیوندی سست" },
+{ term: "Peritoneal membrane", meaning: "پرده صفاق" },
+{ term: "Nerve Cells (Neurons)", meaning: "یاخته‌های عصبی" },
+{ term: "Mucus", meaning: "مخاط" },
+{ term: "Lumen", meaning: "فضای درون لوله گوارش" },
+{ term: "Polysaccharide", meaning: "پلی ساکارید" },
+{ term: "Glucose", meaning: "گلوکز" },
+{ term: "Fructose", meaning: "فروکتوز" },
+{ term: "Galactose", meaning: "گالاکتوز" },
+{ term: "Ribose", meaning: "ریبوز" },
+{ term: "Deoxyribose", meaning: "دئوکسی ریبوز" },
+{ term: "Ribulose", meaning: "ریبولوز" },
+{ term: "Sucrose", meaning: "ساکارز" },
+{ term: "Maltose", meaning: "مالتوز" },
+{ term: "Lactose", meaning: "لاکتوز" },
+{ term: "Facilitated Diffusion", meaning: "انتشار تسهیل‌شده" },
+{ term: "Concentration gradient", meaning: "شیب غلظت" },
+{ term: "Protein molecule", meaning: "مولکول پروتئینی" },
+{ term: "Osmosis", meaning: "اسمز" },
+{ term: "Relative permeability", meaning: "تراوایی نسبی" },
+{ term: "Osmotic Pressure", meaning: "فشار اسمزی" },
+{ term: "Breath", meaning: "دم" },
+{ term: "Interosseous Muscle", meaning: "ماهیچه میان‌بند" },
+{ term: "Intercostal muscle", meaning: "ماهیچه بین‌دنده‌ای" },
+{ term: "Sternum", meaning: "جناغ" },
+{ term: "Chest cavity", meaning: "قفسه سینه" },
+{ term: "Tracheal Cartilages", meaning: "غضروف‌های نای" },
+{ term: "Exhalation", meaning: "بازدم" },
+{ term: "Mucosal secretions", meaning: "ترشحات مخاطی" },
+{ term: "Cilium", meaning: "مژک" },
+{ term: "Ciliary beating", meaning: "حرکت ضربانی مژک‌ها" },
+{ term: "Pharynx", meaning: "حلق" },
+{ term: "Digestive system", meaning: "دستگاه گوارش" },
+{ term: "Gastric juice", meaning: "شیره معده" },
+{ term: "Lung", meaning: "شش" },
+{ term: "Blood", meaning: "خون" },
+{ term: "Larynx", meaning: "حنجره" },
+{ term: "Epiglottis", meaning: "برچاکنای" },
+{ term: "Basement membrane", meaning: "غشای پایه" },
+{ term: "Vocal fold", meaning: "پرده صوتی" },
+{ term: "Submucosa", meaning: "زیرمخاط" },
+
+{ term: "Secretory gland", meaning: "غده ترشحی" },
+{ term: "Chyme", meaning: "کیموس" },
+{ term: "Duodenum", meaning: "دوازدهه" },
+{ term: "Longitudinal muscle", meaning: "ماهیچه طولی" },
+{ term: "Circular muscle", meaning: "ماهیچه حلقوی" },
+{ term: "Pylorus", meaning: "بنداره پیلور" },
+{ term: "Acid", meaning: "اسید" },
+{ term: "Enzyme", meaning: "آنزیم" },
+{ term: "Pepsinogen", meaning: "پپسینوژن" },
+{ term: "Pepsin", meaning: "پپسین" },
+{ term: "Intrinsic factor", meaning: "عامل داخلی معده" },
+{ term: "Red cell", meaning: "گویچه قرمز" },
+{ term: "Gastric gland", meaning: "غده معده" },
+{ term: "Mastication", meaning: "جویدن" },
+{ term: "Mechanical digestion", meaning: "گوارش مکانیکی" },
+{ term: "Digestive enzymes", meaning: "آنزیم‌های گوارشی" },
+{ term: "Saliva", meaning: "بزاق" },
+{ term: "Parotid gland", meaning: "غده بناگوشی" },
+{ term: "Sublingual gland", meaning: "غده زیر زبانی" },
+{ term: "Sub mandibular gland", meaning: "غده زیر آرواره‌ای" },
+{ term: "Salivary duct", meaning: "مجرای بزاق" },
+{ term: "Mucin", meaning: "موسین" },
+{ term: "Lysozyme", meaning: "لیزوزیم" },
+{ term: "Glycoprotein", meaning: "گلیکوپروتئین" },
+{ term: "Uvula", meaning: "زبان کوچک" },
+{ term: "Peristalsis", meaning: "حرکت کرمی" },
+{ term: "Lower esophageal sphincter", meaning: "بنداره انتهای مری" },
+{ term: "Gastric folds", meaning: "چین خوردگی‌های دیواره معده" },
+{ term: "Microbe", meaning: "میکروب" },
+{ term: "Flagellum", meaning: "نایژک" },
+{ term: "Starfish", meaning: "ستاره دریایی" },
+{ term: "Spineless", meaning: "بی‌مهره" },
+{ term: "Amphibian", meaning: "دوزیست" },
+{ term: "Capillary", meaning: "مویرگ" },
+{ term: "Snail", meaning: "حلزون" },
+{ term: "Muscle", meaning: "ماهیچه" },
+{ term: "Mammals", meaning: "پستانداران" },
+{ term: "Respiratory device", meaning: "دستگاه تنفسی" },
+{ term: "Respiratory tract", meaning: "مجاری تنفسی" },
+{ term: "Positive pressure pump", meaning: "پمپ فشار مثبت" },
+{ term: "Cell", meaning: "یاخته" },
+{ term: "Cytoplasm", meaning: "سیتوپلاسم" },
+{ term: "Nucleus", meaning: "هسته" },
+{ term: "Cell membrane", meaning: "غشای یاخته" },
+{ term: "Endoplasmic reticulum", meaning: "شبکه آندوپلاسمی" },
+{ term: "Rough ER", meaning: "زبر" },
+{ term: "Smooth ER", meaning: "صاف" },
+{ term: "Ribosome", meaning: "ریبوزوم" },
+{ term: "Golgi apparatus", meaning: "دستگاه گلژی" },
+{ term: "Mitochondrion", meaning: "میتوکندری" },
+{ term: "Vacuole", meaning: "واکوئل" },
+{ term: "Vesicle", meaning: "ریزکیسه" },
+{ term: "Double-layered membrane", meaning: "غشای دولایه" },
+{ term: "Organelle", meaning: "اندامک" },
+{ term: "Secretion", meaning: "ترشح" },
+{ term: "Packaging", meaning: "بسته‌بندی" },
+{ term: "Energy", meaning: "انرژی" },
+{ term: "Circulatory System", meaning: "دستگاه گردش خون" },
+{ term: "Transport of Gases in the Blood", meaning: "حمل گازها در خون" },
+{ term: "Carbonic Anhydrase", meaning: "کربنیک انیدراز" },
+{ term: "Carbonic acid", meaning: "کربنیک اسید" },
+{ term: "Hemoglobin", meaning: "هموگلوبین" },
+{ term: "Blood plasma", meaning: "خوناب" },
+{ term: "Red blood cell", meaning: "گویچه قرمز" },
+
+{ term: "Inhaled and Exhaled Air", meaning: "هوای دمی و بازدمی" },
+{ term: "Respiratory System", meaning: "دستگاه تنفس" },
+{ term: "Circulatory System", meaning: "دستگاه گردش خون" },
+{ term: "Lungs", meaning: "شش‌ها" },
+{ term: "Dark Blood", meaning: "خون تیره" },
+{ term: "Bright Blood", meaning: "خون روشن" },
+{ term: "Tracheal Respiration", meaning: "تنفس نای دیسی" },
+{ term: "Cutaneous Respiration", meaning: "تنفس پوستی" },
+{ term: "Gill Respiration", meaning: "تنفس آبششی" },
+{ term: "Pulmonary Respiration", meaning: "تنفس ششی" },
+
+{ term: "Connective tissue", meaning: "بافت پیوندی" },
+{ term: "Epithelium", meaning: "بافت پوششی" },
+{ term: "Muscle tissue", meaning: "بافت ماهیچه‌ای" },
+{ term: "Nervous tissue", meaning: "بافت عصبی" },
+{ term: "Basement membrane", meaning: "غشای پایه" },
+{ term: "Collagen", meaning: "کلاژن" },
+{ term: "Adipose tissue", meaning: "بافت چربی" },
+
+{ term: "Muscular layer", meaning: "لایه ماهیچه‌ای" },
+{ term: "Mouth", meaning: "دهان" },
+{ term: "Pharynx", meaning: "حلق" },
+{ term: "Esophagus", meaning: "مری" },
+{ term: "External anal sphincter", meaning: "بنداره خارجی مخرج" },
+{ term: "Skeletal muscle", meaning: "ماهیچه مخطط (اسکلتی)" },
+{ term: "Digestive tract", meaning: "لوله گوارش" },
+{ term: "Smooth muscle cells", meaning: "یاخته‌های ماهیچه‌ای صاف" },
+{ term: "Stomach", meaning: "معده" },
+{ term: "Oblique muscle layer", meaning: "لایه ماهیچه‌ای مورب" },
+{ term: "Submucosal layer", meaning: "لایه زیر مخاطی" },
+{ term: "Mucous layer", meaning: "لایه مخاطی" },
+{ term: "Nerve cells", meaning: "یاخته‌های عصبی" },
+{ term: "Epithelial tissue", meaning: "بافت پوششی" },
+{ term: "Peristaltic movements", meaning: "حرکات کرمی" },
+{ term: "Segmental movements", meaning: "حرکات قطعه‌قطعه‌کننده" },
+{ term: "Sphincter", meaning: "بنداره" },
+{ term: "Pylorus", meaning: "پیلور" },
+{ term: "Small intestine", meaning: "روده باریک" },
+{ term: "Digestive juices", meaning: "شیره‌های گوارشی" },
+{ term: "End of the intestine", meaning: "انتهای روده" },
+{ term: "Contraction", meaning: "انقباض" },
+{ term: "Food", meaning: "توده غذا" },
+
+{ term: "Capillary Network", meaning: "شبکه مویرگی" },
+{ term: "Capillary", meaning: "مویرگ" },
+{ term: "Epithelial cells", meaning: "یاخته‌های پوششی" },
+{ term: "Blood", meaning: "خون" },
+{ term: "Lymphatic vessels", meaning: "رگ‌های لنفی" },
+{ term: "Liver", meaning: "کبد" },
+{ term: "Lipid", meaning: "لیپید" },
+{ term: "Lipoprotein", meaning: "لیپوپروتئین" },
+{ term: "Cholesterol", meaning: "کلسترول" },
+{ term: "Protein", meaning: "پروتئین" },
+{ term: "Artery", meaning: "سرخرگ" },
+{ term: "Large intestine", meaning: "روده بزرگ" },
+{ term: "Horizontal colon", meaning: "کولون افقی" },
+{ term: "Lower colon", meaning: "کولون پایین رو" },
+{ term: "Ascending colon", meaning: "کولون بالا رو" },
+{ term: "End of the small intestine", meaning: "انتهای روده باریک" },
+{ term: "Small intestine", meaning: "روده باریک" },
+{ term: "Appendix", meaning: "آپاندیس" },
+{ term: "Cecum", meaning: "روده کور" },
+{ term: "Rectum", meaning: "راست روده" },
+{ term: "Internal port", meaning: "بنداره داخلی" },
+{ term: "External port", meaning: "بنداره خارجی" },
+{ term: "Exit", meaning: "مخرج" },
+{ term: "LDL", meaning: "لیپوپروتئین کم‌چگال (LDL)" },
+{ term: "HDL", meaning: "لیپوپروتئین پرچگال (HDL)" },
+
+{ term: "Mammals", meaning: "پستانداران" },
+{ term: "Ruminant", meaning: "نشخوارکننده" },
+{ term: "Four-Parted-stomach", meaning: "معده چهار قسمتی" },
+{ term: "Stomach", meaning: "معده" },
+{ term: "Tripe", meaning: "سیرابی" },
+{ term: "Omasum", meaning: "هزارلا" },
+{ term: "Abomasum", meaning: "شیردان" },
+{ term: "Swallowed", meaning: "بلعیده" },
+{ term: "Microbe", meaning: "میکروب" },
+{ term: "Digestion", meaning: "گوارش" },
+{ term: "Cellulose", meaning: "سلولز" },
+{ term: "Chewed", meaning: "جویده شده" },
+{ term: "Liquid", meaning: "مایع" },
+{ term: "Flow", meaning: "جریان" },
+{ term: "Digestive enzymes", meaning: "آنزیم‌های گوارشی" },
+{ term: "Digestive tract", meaning: "لوله‌ی گوارش" },
+{ term: "Digestive tube / hollow tube", meaning: "لوله‌ی توخالی / مجرای گوارش" },
+{ term: "Flow of food", meaning: "جریان غذا" },
+{ term: "Anus", meaning: "مخرج" },
+{ term: "Mouth", meaning: "دهان" },
+{ term: "Swallowing", meaning: "بلعیدن" },
+{ term: "Esophagus", meaning: "مری" },
+{ term: "Crop", meaning: "چینه‌دان" },
+{ term: "Stomach", meaning: "معده" },
+{ term: "Gastric sacs", meaning: "کیسه‌های معده‌ای" },
+{ term: "Small intestine and rectum", meaning: "روده‌ی باریک و راست‌روده" },
+{ term: "Absorption of nutrients", meaning: "جذب مواد غذایی" },
+{ term: "Waste materials / feces", meaning: "مواد زاید / فضولات" },
+{ term: "Grain-eating birds", meaning: "پرندگان دانه‌خوار" },
+{ term: "Gizzard", meaning: "سنگدان" },
+{ term: "Hard foods (like seeds)", meaning: "غذاهای سخت (مثل دانه)" },
+{ term: "Liver", meaning: "کبد" },
+{ term: "Digestive system of birds", meaning: "دستگاه گوارش پرندگان" },
+{ term: "Muscular structure", meaning: "ساختار ماهیچه‌ای" },
+{ term: "Digestion (breaking down of food)", meaning: "هضم / تجزیه‌ی غذا" },
+
+{ term: "Great saphehous vein", meaning: "بزرگ سیاهرگ زیرین" },
+{ term: "Heart", meaning: "قلب" },
+{ term: "Liver", meaning: "کبد" },
+{ term: "babs Black vein", meaning: "سیاه رگ باب" },
+{ term: "Vein", meaning: "سیاهرگ" },
+{ term: "Glycogen", meaning: "گلیکوژن" },
+{ term: "Protein", meaning: "پروتئین" },
+{ term: "Iron", meaning: "آهن" },
+{ term: "Vitamin", meaning: "ویتامین" },
+{ term: "Digestive system", meaning: "دستگاه گوارش" },
+{ term: "Hepatic vein", meaning: "سیاهرگ فوق کبد" },
+{ term: "Regulation of Digestive processes", meaning: "تنظیم فرآیندهای گوارشی" },
+{ term: "Neural cell Networks", meaning: "شبکه‌های یاخته‌های عصبی" },
+{ term: "Digestive Tract", meaning: "لوله گوارش" },
+{ term: "Nervous and Endocrine systems Hormonal", meaning: "دستگاه‌های عصبی و غدد درون‌ریز هورمونی" },
+{ term: "Autonomic Nervous system", meaning: "دستگاه عصبی خودمختار" },
+{ term: "Saliva and secretion", meaning: "بزاق و ترشح" },
+{ term: "Salivary glands", meaning: "غده‌های بزاقی" },
+{ term: "Bone marrow onion", meaning: "بصل النخاع" },
+{ term: "Wall", meaning: "دیواره" },
+{ term: "Mary", meaning: "مری" },
+{ term: "Muscle", meaning: "ماهیچه‌ای" },
+{ term: "Mucus", meaning: "مخاط" },
+{ term: "Enteric Neural Networks", meaning: "شبکه‌های عصبی رودها" },
+
+{ term: "Internal environment", meaning: "محیط داخلی" },
+{ term: "Nutrients", meaning: "مواد مغذی" },
+{ term: "Inner wall of the intestine", meaning: "دیواره داخلی روده" },
+{ term: "Circular folds", meaning: "چین‌های حلقوی" },
+{ term: "Ting villus", meaning: "ریزپرز" },
+{ term: "Celiac disease", meaning: "بیماری سلیاک" },
+{ term: "Gluten", meaning: "گلوتن" },
+{ term: "Lint", meaning: "پرز" },
+{ term: "Muscle layers", meaning: "لایه‌های ماهیچه‌ای" },
+{ term: "Outer layer", meaning: "لایه‌ی بیرونی" },
+{ term: "Lymphatic capillary", meaning: "مویرگ لنفی" },
+{ term: "Intestinal gland", meaning: "غده‌ی روده" },
+{ term: "Capillary network of the villus", meaning: "شبکه‌ی مویرگی پرزها" },
+{ term: "Mucus - Secreting cell", meaning: "یاخته ترشح‌کننده مخاطی" },
+
+{ term: "Liver", meaning: "کبد" },
+{ term: "Gall bladder", meaning: "کیسه صفرا" },
+{ term: "Bile duct", meaning: "مجرای صفرا" },
+{ term: "Pancreatic duct", meaning: "مجرای لوزالمعده" },
+{ term: "Pancreas", meaning: "لوزالمعده" },
+{ term: "Twelve", meaning: "دوازدهه" },
+{ term: "Mosin", meaning: "موسین" },
+{ term: "Chyme", meaning: "کیموس" },
+{ term: "Stomach", meaning: "معده" },
+{ term: "Intestinal juice", meaning: "شیره روده" },
+        { term: "Nucleus", meaning: "هسته" }
+      ],
+      grade11: [
+        { term: "Enzyme", meaning: "آنزیم" },
+        { term: "Hormone", meaning: "هورمون" },
+        { term: "Neuron", meaning: "نورون" },
+    
+{ term: "Pancreatic juice", meaning: "شیره‌ی لوزالمعده" },
+{ term: "Bicarbonate", meaning: "بیکربنات" },
+{ term: "Protease", meaning: "پروتئاز" },
+{ term: "Small intestine", meaning: "روده‌ی باریک" },
+{ term: "Stomach acid", meaning: "اسید معده" },
+{ term: "Twelve", meaning: "دوازدهه" },
+{ term: "Trypsin", meaning: "تریپسین" },
+{ term: "Protein", meaning: "پروتئین" },
+{ term: "Peptide bond", meaning: "پیوند پپتیدی" },
+{ term: "Carboxypeptidase", meaning: "کربوکسی پپتیداز" },
+{ term: "Lipase", meaning: "لیپاز" },
+{ term: "Glycerol", meaning: "گلیسرول" },
+{ term: "Fatty acid", meaning: "اسید چرب" },
+{ term: "Lipid", meaning: "لیپید" },
+{ term: "Phospholipase", meaning: "فسفولیپاز" },
+{ term: "Phospholipid", meaning: "فسفولیپید" },
+{ term: "Amylase", meaning: "آمیلاز" },
+{ term: "Starch", meaning: "نشاسته" },
+{ term: "Glycogen", meaning: "گلیکوژن" },
+{ term: "Monosaccharide", meaning: "مونو ساکارید" },
+{ term: "Disaccharide", meaning: "دی ساکارید" },
+{ term: "Trisaccharide", meaning: "تری ساکارید" },
+{ term: "Nuclease", meaning: "نوکلئاز" },
+{ term: "Nucleic acid", meaning: "نوکلئیک اسید" },
+{ term: "Carbohydrate", meaning: "کربوهیدرات" },
+{ term: "Digestion", meaning: "گوارش" },
+{ term: "Hydrolysis", meaning: "هیدرولیز" },
+{ term: "Macromolecules", meaning: "مولکول‌های درشت" },
+{ term: "Cellulose", meaning: "سلولز" },
+{ term: "Amino acid", meaning: "آمینو اسید" },
+{ term: "Triglyceride", meaning: "تری گلیسیرید" },
+{ term: "Gallbladder", meaning: "کیسه صفرا" },
+{ term: "Digestive tract", meaning: "لوله گوارش" },
+{ term: "Sphincter", meaning: "بنداره" },
+{ term: "Liver", meaning: "کبد" },
+{ term: "Esophagus", meaning: "مری" },
+{ term: "Stomach", meaning: "معده" },
+{ term: "Pancreas", meaning: "لوزالمعده" },
+{ term: "Large intestine", meaning: "روده بزرگ" },
+{ term: "Rectum", meaning: "راست‌روده" },
+{ term: "Bladder", meaning: "مخرج" },
+{ term: "Loose connective tissue", meaning: "بافت پیوندی سست" },
+{ term: "Peritoneal membrane", meaning: "پرده صفاق" },
+{ term: "Nerve Cells (Neurons)", meaning: "یاخته‌های عصبی" },
+{ term: "Mucus", meaning: "مخاط" },
+{ term: "Lumen", meaning: "فضای درون لوله گوارش" },
+{ term: "Polysaccharide", meaning: "پلی ساکارید" },
+{ term: "Glucose", meaning: "گلوکز" },
+{ term: "Fructose", meaning: "فروکتوز" },
+{ term: "Galactose", meaning: "گالاکتوز" },
+{ term: "Ribose", meaning: "ریبوز" },
+{ term: "Deoxyribose", meaning: "دئوکسی ریبوز" },
+{ term: "Ribulose", meaning: "ریبولوز" },
+{ term: "Sucrose", meaning: "ساکارز" },
+{ term: "Maltose", meaning: "مالتوز" },
+{ term: "Lactose", meaning: "لاکتوز" },
+{ term: "Facilitated Diffusion", meaning: "انتشار تسهیل‌شده" },
+{ term: "Concentration gradient", meaning: "شیب غلظت" },
+{ term: "Protein molecule", meaning: "مولکول پروتئینی" },
+{ term: "Osmosis", meaning: "اسمز" },
+{ term: "Relative permeability", meaning: "تراوایی نسبی" },
+{ term: "Osmotic Pressure", meaning: "فشار اسمزی" },
+{ term: "Breath", meaning: "دم" },
+{ term: "Interosseous Muscle", meaning: "ماهیچه میان‌بند" },
+{ term: "Intercostal muscle", meaning: "ماهیچه بین‌دنده‌ای" },
+{ term: "Sternum", meaning: "جناغ" },
+{ term: "Chest cavity", meaning: "قفسه سینه" },
+{ term: "Tracheal Cartilages", meaning: "غضروف‌های نای" },
+{ term: "Exhalation", meaning: "بازدم" },
+{ term: "Mucosal secretions", meaning: "ترشحات مخاطی" },
+{ term: "Cilium", meaning: "مژک" },
+{ term: "Ciliary beating", meaning: "حرکت ضربانی مژک‌ها" },
+{ term: "Pharynx", meaning: "حلق" },
+{ term: "Digestive system", meaning: "دستگاه گوارش" },
+{ term: "Gastric juice", meaning: "شیره معده" },
+{ term: "Lung", meaning: "شش" },
+{ term: "Blood", meaning: "خون" },
+{ term: "Larynx", meaning: "حنجره" },
+{ term: "Epiglottis", meaning: "برچاکنای" },
+{ term: "Basement membrane", meaning: "غشای پایه" },
+{ term: "Vocal fold", meaning: "پرده صوتی" },
+{ term: "Submucosa", meaning: "زیرمخاط" },
+
+{ term: "Secretory gland", meaning: "غده ترشحی" },
+{ term: "Chyme", meaning: "کیموس" },
+{ term: "Duodenum", meaning: "دوازدهه" },
+{ term: "Longitudinal muscle", meaning: "ماهیچه طولی" },
+{ term: "Circular muscle", meaning: "ماهیچه حلقوی" },
+{ term: "Pylorus", meaning: "بنداره پیلور" },
+{ term: "Acid", meaning: "اسید" },
+{ term: "Enzyme", meaning: "آنزیم" },
+{ term: "Pepsinogen", meaning: "پپسینوژن" },
+{ term: "Pepsin", meaning: "پپسین" },
+{ term: "Intrinsic factor", meaning: "عامل داخلی معده" },
+{ term: "Red cell", meaning: "گویچه قرمز" },
+{ term: "Gastric gland", meaning: "غده معده" },
+{ term: "Mastication", meaning: "جویدن" },
+{ term: "Mechanical digestion", meaning: "گوارش مکانیکی" },
+{ term: "Digestive enzymes", meaning: "آنزیم‌های گوارشی" },
+{ term: "Saliva", meaning: "بزاق" },
+{ term: "Parotid gland", meaning: "غده بناگوشی" },
+{ term: "Sublingual gland", meaning: "غده زیر زبانی" },
+{ term: "Sub mandibular gland", meaning: "غده زیر آرواره‌ای" },
+{ term: "Salivary duct", meaning: "مجرای بزاق" },
+{ term: "Mucin", meaning: "موسین" },
+{ term: "Lysozyme", meaning: "لیزوزیم" },
+{ term: "Glycoprotein", meaning: "گلیکوپروتئین" },
+{ term: "Uvula", meaning: "زبان کوچک" },
+{ term: "Peristalsis", meaning: "حرکت کرمی" },
+{ term: "Lower esophageal sphincter", meaning: "بنداره انتهای مری" },
+{ term: "Gastric folds", meaning: "چین خوردگی‌های دیواره معده" },
+{ term: "Microbe", meaning: "میکروب" },
+{ term: "Flagellum", meaning: "نایژک" },
+{ term: "Starfish", meaning: "ستاره دریایی" },
+{ term: "Spineless", meaning: "بی‌مهره" },
+{ term: "Amphibian", meaning: "دوزیست" },
+{ term: "Capillary", meaning: "مویرگ" },
+{ term: "Snail", meaning: "حلزون" },
+{ term: "Muscle", meaning: "ماهیچه" },
+{ term: "Mammals", meaning: "پستانداران" },
+{ term: "Respiratory device", meaning: "دستگاه تنفسی" },
+{ term: "Respiratory tract", meaning: "مجاری تنفسی" },
+{ term: "Positive pressure pump", meaning: "پمپ فشار مثبت" },
+{ term: "Cell", meaning: "یاخته" },
+{ term: "Cytoplasm", meaning: "سیتوپلاسم" },
+{ term: "Nucleus", meaning: "هسته" },
+{ term: "Cell membrane", meaning: "غشای یاخته" },
+{ term: "Endoplasmic reticulum", meaning: "شبکه آندوپلاسمی" },
+{ term: "Rough ER", meaning: "زبر" },
+{ term: "Smooth ER", meaning: "صاف" },
+{ term: "Ribosome", meaning: "ریبوزوم" },
+{ term: "Golgi apparatus", meaning: "دستگاه گلژی" },
+{ term: "Mitochondrion", meaning: "میتوکندری" },
+{ term: "Vacuole", meaning: "واکوئل" },
+{ term: "Vesicle", meaning: "ریزکیسه" },
+{ term: "Double-layered membrane", meaning: "غشای دولایه" },
+{ term: "Organelle", meaning: "اندامک" },
+{ term: "Secretion", meaning: "ترشح" },
+{ term: "Packaging", meaning: "بسته‌بندی" },
+{ term: "Energy", meaning: "انرژی" },
+{ term: "Circulatory System", meaning: "دستگاه گردش خون" },
+{ term: "Transport of Gases in the Blood", meaning: "حمل گازها در خون" },
+{ term: "Carbonic Anhydrase", meaning: "کربنیک انیدراز" },
+{ term: "Carbonic acid", meaning: "کربنیک اسید" },
+{ term: "Hemoglobin", meaning: "هموگلوبین" },
+{ term: "Blood plasma", meaning: "خوناب" },
+{ term: "Red blood cell", meaning: "گویچه قرمز" },
+
+{ term: "Inhaled and Exhaled Air", meaning: "هوای دمی و بازدمی" },
+{ term: "Respiratory System", meaning: "دستگاه تنفس" },
+{ term: "Circulatory System", meaning: "دستگاه گردش خون" },
+{ term: "Lungs", meaning: "شش‌ها" },
+{ term: "Dark Blood", meaning: "خون تیره" },
+{ term: "Bright Blood", meaning: "خون روشن" },
+{ term: "Tracheal Respiration", meaning: "تنفس نای دیسی" },
+{ term: "Cutaneous Respiration", meaning: "تنفس پوستی" },
+{ term: "Gill Respiration", meaning: "تنفس آبششی" },
+{ term: "Pulmonary Respiration", meaning: "تنفس ششی" },
+
+{ term: "Connective tissue", meaning: "بافت پیوندی" },
+{ term: "Epithelium", meaning: "بافت پوششی" },
+{ term: "Muscle tissue", meaning: "بافت ماهیچه‌ای" },
+{ term: "Nervous tissue", meaning: "بافت عصبی" },
+{ term: "Basement membrane", meaning: "غشای پایه" },
+{ term: "Collagen", meaning: "کلاژن" },
+{ term: "Adipose tissue", meaning: "بافت چربی" },
+
+{ term: "Muscular layer", meaning: "لایه ماهیچه‌ای" },
+{ term: "Mouth", meaning: "دهان" },
+{ term: "Pharynx", meaning: "حلق" },
+{ term: "Esophagus", meaning: "مری" },
+{ term: "External anal sphincter", meaning: "بنداره خارجی مخرج" },
+{ term: "Skeletal muscle", meaning: "ماهیچه مخطط (اسکلتی)" },
+{ term: "Digestive tract", meaning: "لوله گوارش" },
+{ term: "Smooth muscle cells", meaning: "یاخته‌های ماهیچه‌ای صاف" },
+{ term: "Stomach", meaning: "معده" },
+{ term: "Oblique muscle layer", meaning: "لایه ماهیچه‌ای مورب" },
+{ term: "Submucosal layer", meaning: "لایه زیر مخاطی" },
+{ term: "Mucous layer", meaning: "لایه مخاطی" },
+{ term: "Nerve cells", meaning: "یاخته‌های عصبی" },
+{ term: "Epithelial tissue", meaning: "بافت پوششی" },
+{ term: "Peristaltic movements", meaning: "حرکات کرمی" },
+{ term: "Segmental movements", meaning: "حرکات قطعه‌قطعه‌کننده" },
+{ term: "Sphincter", meaning: "بنداره" },
+{ term: "Pylorus", meaning: "پیلور" },
+{ term: "Small intestine", meaning: "روده باریک" },
+{ term: "Digestive juices", meaning: "شیره‌های گوارشی" },
+{ term: "End of the intestine", meaning: "انتهای روده" },
+{ term: "Contraction", meaning: "انقباض" },
+{ term: "Food", meaning: "توده غذا" },
+
+{ term: "Capillary Network", meaning: "شبکه مویرگی" },
+{ term: "Capillary", meaning: "مویرگ" },
+{ term: "Epithelial cells", meaning: "یاخته‌های پوششی" },
+{ term: "Blood", meaning: "خون" },
+{ term: "Lymphatic vessels", meaning: "رگ‌های لنفی" },
+{ term: "Liver", meaning: "کبد" },
+{ term: "Lipid", meaning: "لیپید" },
+{ term: "Lipoprotein", meaning: "لیپوپروتئین" },
+{ term: "Cholesterol", meaning: "کلسترول" },
+{ term: "Protein", meaning: "پروتئین" },
+{ term: "Artery", meaning: "سرخرگ" },
+{ term: "Large intestine", meaning: "روده بزرگ" },
+{ term: "Horizontal colon", meaning: "کولون افقی" },
+{ term: "Lower colon", meaning: "کولون پایین رو" },
+{ term: "Ascending colon", meaning: "کولون بالا رو" },
+{ term: "End of the small intestine", meaning: "انتهای روده باریک" },
+{ term: "Small intestine", meaning: "روده باریک" },
+{ term: "Appendix", meaning: "آپاندیس" },
+{ term: "Cecum", meaning: "روده کور" },
+{ term: "Rectum", meaning: "راست روده" },
+{ term: "Internal port", meaning: "بنداره داخلی" },
+{ term: "External port", meaning: "بنداره خارجی" },
+{ term: "Exit", meaning: "مخرج" },
+{ term: "LDL", meaning: "لیپوپروتئین کم‌چگال (LDL)" },
+{ term: "HDL", meaning: "لیپوپروتئین پرچگال (HDL)" },
+
+{ term: "Mammals", meaning: "پستانداران" },
+{ term: "Ruminant", meaning: "نشخوارکننده" },
+{ term: "Four-Parted-stomach", meaning: "معده چهار قسمتی" },
+{ term: "Stomach", meaning: "معده" },
+{ term: "Tripe", meaning: "سیرابی" },
+{ term: "Omasum", meaning: "هزارلا" },
+{ term: "Abomasum", meaning: "شیردان" },
+{ term: "Swallowed", meaning: "بلعیده" },
+{ term: "Microbe", meaning: "میکروب" },
+{ term: "Digestion", meaning: "گوارش" },
+{ term: "Cellulose", meaning: "سلولز" },
+{ term: "Chewed", meaning: "جویده شده" },
+{ term: "Liquid", meaning: "مایع" },
+{ term: "Flow", meaning: "جریان" },
+{ term: "Digestive enzymes", meaning: "آنزیم‌های گوارشی" },
+
+{ term: "Digestive tract", meaning: "لوله‌ی گوارش" },
+{ term: "Digestive tube / hollow tube", meaning: "لوله‌ی توخالی / مجرای گوارش" },
+{ term: "Flow of food", meaning: "جریان غذا" },
+{ term: "Anus", meaning: "مخرج" },
+{ term: "Mouth", meaning: "دهان" },
+{ term: "Swallowing", meaning: "بلعیدن" },
+{ term: "Esophagus", meaning: "مری" },
+{ term: "Crop", meaning: "چینه‌دان" },
+{ term: "Stomach", meaning: "معده" },
+{ term: "Gastric sacs", meaning: "کیسه‌های معده‌ای" },
+{ term: "Small intestine and rectum", meaning: "روده‌ی باریک و راست‌روده" },
+{ term: "Absorption of nutrients", meaning: "جذب مواد غذایی" },
+{ term: "Waste materials / feces", meaning: "مواد زاید / فضولات" },
+{ term: "Grain-eating birds", meaning: "پرندگان دانه‌خوار" },
+{ term: "Gizzard", meaning: "سنگدان" },
+{ term: "Hard foods (like seeds)", meaning: "غذاهای سخت (مثل دانه)" },
+{ term: "Liver", meaning: "کبد" },
+{ term: "Digestive system of birds", meaning: "دستگاه گوارش پرندگان" },
+{ term: "Muscular structure", meaning: "ساختار ماهیچه‌ای" },
+{ term: "Digestion (breaking down of food)", meaning: "هضم / تجزیه‌ی غذا" },
+
+{ term: "Great saphehous vein", meaning: "بزرگ سیاهرگ زیرین" },
+{ term: "Heart", meaning: "قلب" },
+{ term: "Liver", meaning: "کبد" },
+{ term: "babs Black vein", meaning: "سیاه رگ باب" },
+{ term: "Vein", meaning: "سیاهرگ" },
+{ term: "Glycogen", meaning: "گلیکوژن" },
+{ term: "Protein", meaning: "پروتئین" },
+{ term: "Iron", meaning: "آهن" },
+{ term: "Vitamin", meaning: "ویتامین" },
+{ term: "Digestive system", meaning: "دستگاه گوارش" },
+{ term: "Hepatic vein", meaning: "سیاهرگ فوق کبد" },
+{ term: "Regulation of Digestive processes", meaning: "تنظیم فرآیندهای گوارشی" },
+{ term: "Neural cell Networks", meaning: "شبکه‌های یاخته‌های عصبی" },
+{ term: "Digestive Tract", meaning: "لوله گوارش" },
+{ term: "Nervous and Endocrine systems Hormonal", meaning: "دستگاه‌های عصبی و غدد درون‌ریز هورمونی" },
+{ term: "Autonomic Nervous system", meaning: "دستگاه عصبی خودمختار" },
+{ term: "Saliva and secretion", meaning: "بزاق و ترشح" },
+{ term: "Salivary glands", meaning: "غده‌های بزاقی" },
+{ term: "Bone marrow onion", meaning: "بصل النخاع" },
+{ term: "Wall", meaning: "دیواره" },
+{ term: "Mary", meaning: "مری" },
+{ term: "Muscle", meaning: "ماهیچه‌ای" },
+{ term: "Mucus", meaning: "مخاط" },
+{ term: "Enteric Neural Networks", meaning: "شبکه‌های عصبی رودها" },
+
+{ term: "Internal environment", meaning: "محیط داخلی" },
+{ term: "Nutrients", meaning: "مواد مغذی" },
+{ term: "Inner wall of the intestine", meaning: "دیواره داخلی روده" },
+{ term: "Circular folds", meaning: "چین‌های حلقوی" },
+{ term: "Ting villus", meaning: "ریزپرز" },
+{ term: "Celiac disease", meaning: "بیماری سلیاک" },
+{ term: "Gluten", meaning: "گلوتن" },
+{ term: "Lint", meaning: "پرز" },
+{ term: "Muscle layers", meaning: "لایه‌های ماهیچه‌ای" },
+{ term: "Outer layer", meaning: "لایه‌ی بیرونی" },
+{ term: "Lymphatic capillary", meaning: "مویرگ لنفی" },
+{ term: "Intestinal gland", meaning: "غده‌ی روده" },
+{ term: "Capillary network of the villus", meaning: "شبکه‌ی مویرگی پرزها" },
+{ term: "Mucus - Secreting cell", meaning: "یاخته ترشح‌کننده مخاطی" },
+
+{ term: "Liver", meaning: "کبد" },
+{ term: "Gall bladder", meaning: "کیسه صفرا" },
+{ term: "Bile duct", meaning: "مجرای صفرا" },
+{ term: "Pancreatic duct", meaning: "مجرای لوزالمعده" },
+{ term: "Pancreas", meaning: "لوزالمعده" },
+{ term: "Twelve", meaning: "دوازدهه" },
+{ term: "Mosin", meaning: "موسین" },
+{ term: "Chyme", meaning: "کیموس" },
+{ term: "Stomach", meaning: "معده" },
+{ term: "Intestinal juice", meaning: "شیره روده" },
+
+{ term: "Eye", meaning: "چشم" },
+{ term: "Astigmatism Eye", meaning: "چشم آستیگمات" },
+{ term: "Anatomy of the Eye", meaning: "تشریح چشم" },
+{ term: "Optic nerve", meaning: "عصب بینایی" },
+{ term: "Cornea", meaning: "قرنیه" },
+{ term: "Eyeball", meaning: "کره چشم" },
+{ term: "Nose", meaning: "بینی" },
+{ term: "Ear", meaning: "گوش" },
+{ term: "Adipose tissue", meaning: "بافت چربی" },
+{ term: "Eye muscle", meaning: "ماهیچه چشم" },
+{ term: "Eye model (moulage)", meaning: "مولاژ چشم" },
+{ term: "Sclera", meaning: "صلبیه" },
+{ term: "Glassware", meaning: "زجاجیه" },
+{ term: "Blind spot", meaning: "نقطه کور" },
+{ term: "Retina", meaning: "شبکیه" },
+{ term: "Lens", meaning: "عدسی" },
+{ term: "Ciliary body", meaning: "جسم مژگانی" },
+{ term: "Suspended cables", meaning: "تارهای آویزی" },
+{ term: "Aqueous humour", meaning: "زلالیه" },
+{ term: "Melanin Granules", meaning: "دانه های ملانین" },
+{ term: "Iris", meaning: "عنبیه" },
+{ term: "Smooth muscles circular", meaning: "ماهیچه های صاف حلقوی" },
+{ term: "Radial smooth muscles", meaning: "ماهیچه های صاف شعاعی" },
+{ term: "Pupil", meaning: "مردمک" },
+{ term: "Chorion", meaning: "مشیمیه" },
+{ term: "Hearing", meaning: "شنوایی" },
+{ term: "Equilibrium", meaning: "تعادل" },
+{ term: "Mechanical receptors", meaning: "گیرنده های مکانیکی" },
+{ term: "External ear", meaning: "بخش بیرونی گوش" },
+{ term: "Middle ear", meaning: "بخش میانی گوش" },
+{ term: "Inner ear", meaning: "بخش درونی گوش" },
+{ term: "Sensory receptor", meaning: "گیرنده حسی" },
+{ term: "Stimulus", meaning: "محرک" },
+{ term: "Neural message", meaning: "پیام عصبی" },
+{ term: "Membrane", meaning: "غشا" },
+{ term: "Pressure receiver", meaning: "گیرنده فشار" },
+{ term: "The skin", meaning: "پوست" },
+{ term: "Connective tissue", meaning: "بافت پیوندی" },
+{ term: "Ion channel", meaning: "کانال یونی" },
+{ term: "Central nervous system", meaning: "دستگاه عصبی مرکزی" },
+{ term: "Compromise", meaning: "سازش" },
+{ term: "Processing", meaning: "پردازش" },
+{ term: "Taste receptor", meaning: "گیرنده چشایی" },
+{ term: "Bodily senses", meaning: "حواس پیکری" },
+{ term: "Special senses", meaning: "حواس ویژه" },
+{ term: "Skeletal muscle", meaning: "ماهیچه اسکلتی" },
+{ term: "Tendon", meaning: "زردپی" },
+{ term: "Finger", meaning: "انگشت" },
+{ term: "Lips", meaning: "لب" },
+{ term: "Vein", meaning: "سیاهرگ" },
+{ term: "Sensory Receptors", meaning: "گیرنده های حسی" },
+{ term: "Specialized Devices", meaning: "دستگاه های ویژه" },
+{ term: "Receiving receptors", meaning: "گیرنده های دریافت کننده" },
+{ term: "Mechanical lateral line", meaning: "گیرنده های مکانیکی خط جانبی" },
+{ term: "Lateral line", meaning: "خط جانبی" },
+{ term: "Chemical receptors", meaning: "گیرنده های شیمیایی" },
+{ term: "Ciliated cells", meaning: "یاخته های مژک دار" },
+{ term: "Sensory hair", meaning: "موی حسی" },
+{ term: "Gelatinous substance", meaning: "ماده ژلاتینی" },
+{ term: "Supporting cell", meaning: "یاخته پشتیبان" },
+{ term: "Chemical Receptors in the Foot", meaning: "گیرنده های شیمیایی در پا" },
+{ term: "Lateral line canal", meaning: "کانال خط جانبی" },
+{ term: "Nerve", meaning: "عصب" },
+{ term: "Neural Pathways", meaning: "رشته های عصبی" },
+{ term: "Nervous system", meaning: "دستگاه عصبی" },
+{ term: "Mechanical sound receptors in the foot", meaning: "گیرنده های مکانیکی صدا در پا" },
+{ term: "Sound waves", meaning: "امواج صوتی" },
+{ term: "Photoreceptors cells", meaning: "یاخته های گیرنده نور" },
+{ term: "Optical Receivers", meaning: "گیرنده های نوری" },
+{ term: "Optical Receptors Compound Eyes", meaning: "گیرنده های نوری چشم مرکب" },
+{ term: "Simple eye", meaning: "چشم ساده" },
+{ term: "Compound eye", meaning: "چشم مرکب" },
+{ term: "Visual unit", meaning: "واحد بینایی" },
+{ term: "Field of view", meaning: "میدان بینایی" },
+{ term: "Tympanic Membrane", meaning: "پرده صماخ" },
+
+{ term: "Receiver", meaning: "گیرنده" },
+{ term: "Infrared Receiver", meaning: "گیرنده فروسرخ" },
+{ term: "Infrared", meaning: "فروسرخ" },
+{ term: "Rattlesnake Infrared Receiver", meaning: "گیرنده فروسرخ مار زنگی" },
+{ term: "Magnetic Receiver", meaning: "گیرنده مغناطیسی" },
+{ term: "Electric Receiver", meaning: "گیرنده الکتریکی" },
+{ term: "Senses", meaning: "حواس" },
+{ term: "Lobe", meaning: "لوب" },
+{ term: "Olfactory lobe", meaning: "لوب بویایی" },
+{ term: "Olfactory bulb", meaning: "پیاز بویایی" },
+{ term: "Optic lobe", meaning: "لوب بینایی" },
+{ term: "Occipital lobe", meaning: "لوب پس سری" },
+{ term: "Cerebrum", meaning: "مخ" },
+{ term: "Spinal cord", meaning: "نخاع" },
+{ term: "Cerebellum", meaning: "مخچه" },
+{ term: "Medulla oblongata", meaning: "بصل النخاع" },
+{ term: "Optic Nerve", meaning: "عصب بینایی" },
+{ term: "Olfactory Nerve", meaning: "عصب بویایی" },
+{ term: "Central canal", meaning: "مجرای مرکزی" },
+{ term: "Long bones", meaning: "استخوان های دراز" },
+{ term: "Red bone marrow", meaning: "مغز قرمز استخوان" },
+{ term: "Spongy Bone Tissue", meaning: "بافت استخوان اسفنجی" },
+{ term: "Bone cell", meaning: "یاخته استخوانی" },
+{ term: "Blood vessels", meaning: "رگهای خونی" },
+{ term: "Haversian system", meaning: "سامانه هاورس" },
+{ term: "Haversian canal", meaning: "مجرای هاورس" },
+{ term: "Substrate material", meaning: "ماده زمینه ای" },
+{ term: "Bone Changes", meaning: "تغیرات استخوانی" },
+{ term: "Bone Density", meaning: "تراکم استخوان" },
+{ term: "Microscopic fracture", meaning: "شکستگی میکروسکوپی" },
+{ term: "Head of the femur bone", meaning: "سر استخوان ران" },
+{ term: "Radiography", meaning: "رادیوگرافی" },
+{ term: "Bone Strength", meaning: "استحکام استخوان" },
+{ term: "Osteoporosis", meaning: "پوکی استخوان" },
+{ term: "Hormone Secretion", meaning: "ترشح هورمون ها" },
+{ term: "Calcium deposition", meaning: "رسوب کلسیم" },
+{ term: "Vitamin D Deficiency", meaning: "کمبود ویتامین D" },
+{ term: "Calcium Deficiency in Diet", meaning: "کمبود کلسیم غذا" },
+
+{ term: "Brain", meaning: "مغز" },
+{ term: "Cerebral hematoma", meaning: "سد خونی مغزی" },
+{ term: "Spinal cord hematoma", meaning: "سد خونی نخاعی" },
+{ term: "Cerebellum", meaning: "مخچه" },
+{ term: "Stem brain", meaning: "ساقه مغز" },
+{ term: "Cerebral cortex", meaning: "قشر مخ" },
+{ term: "Syndesmosis ligament", meaning: "رابط پینه ای" },
+{ term: "Delta connection", meaning: "رابط سه گوش" },
+{ term: "Spinal cord", meaning: "نخاع" },
+{ term: "Temporal lobe", meaning: "لوب گیجگاهی" },
+{ term: "Occipital lobe", meaning: "لوب پس سری" },
+{ term: "Parietal lobe", meaning: "لوب آهیانه" },
+{ term: "Frontal lobe", meaning: "لوب پیشانی" },
+{ term: "Muscle", meaning: "ماهیچه" },
+{ term: "Gland", meaning: "غده" },
+{ term: "Mid brain", meaning: "مغز میانی" },
+{ term: "Brain bridge", meaning: "پل مغزی" },
+{ term: "Medulla oblongata", meaning: "بصل النخاع" },
+{ term: "Quadrilateral prominence", meaning: "برجستگی های چهارگانه" },
+{ term: "Carmine", meaning: "کرمینه" },
+{ term: "Hypothalamus", meaning: "هیپوتالاموس" },
+{ term: "Thalamus", meaning: "تالاموس" },
+{ term: "Pituitary gland", meaning: "هیپوفیز" },
+{ term: "Epiphysis", meaning: "اپی فیز" },
+{ term: "Limbic", meaning: "لیمبیک" },
+{ term: "Hippocampus", meaning: "هیپوکامپ" },
+{ term: "Tendon", meaning: "زردپی" },
+{ term: "Biceps brachii muscle", meaning: "ماهیچه دوسر بازو" },
+{ term: "Triceps Brachii Muscle", meaning: "ماهیچه سه سر بازو" },
+{ term: "Sarcomere", meaning: "سارکومر" },
+{ term: "Muscle fiber", meaning: "تار ماهیچه ای" },
+{ term: "Myofibril", meaning: "تارچه ماهیچه ای" },
+{ term: "Z line/Z disc", meaning: "خط زد" },
+{ term: "Actin", meaning: "اکتین" },
+{ term: "Myosin", meaning: "میوزین" },
+{ term: "Tail", meaning: "دم (بخش انتهایی که باعث اتصال میوزین ها به هم تشکیل رشته ضخیم میشود)" },
+{ term: "Head", meaning: "بخش سر مولکول میوزین" },
+{ term: "Muscle contraction", meaning: "انقباض ماهیچه" },
+{ term: "Endoplasmic Reticulum", meaning: "شبکه آندوپلاسمی" },
+{ term: "Receptor", meaning: "گیرنده" },
+{ term: "Symbiont", meaning: "همایه" },
+{ term: "Muscle Cell", meaning: "یاخته ماهیچه ای" },
+{ term: "Calcium Ion", meaning: "یون کلسیم" },
+{ term: "Clostridium botulinum", meaning: "باکتری بوتولینوم" },
+{ term: "Acetylcholine", meaning: "استیل کولین" },
+{ term: "Detailed joint", meaning: "مفصل" },
+{ term: "Skull", meaning: "جمجمه" },
+{ term: "Fixed joint", meaning: "مفصل ثابت" },
+{ term: "Cartilage tissue", meaning: "بافت غضروفی" },
+{ term: "Joint capsule", meaning: "کپسول مفصلی" },
+{ term: "Ligament", meaning: "رباط" },
+{ term: "Bowl joint", meaning: "مفصل کاسه ای" },
+{ term: "Hinge joint", meaning: "مفصل لولایی" },
+{ term: "Sliding joint", meaning: "مفصل لغزنده" },
+{ term: "Cruciate ligament", meaning: "رباط صلیبی" },
+{ term: "Fibula", meaning: "نازک نی" },
+{ term: "Tibia", meaning: "درشت نی" },
+{ term: "Carrier", meaning: "ناقل" },
+{ term: "Neurotransmitter", meaning: "ناقل عصبی" },
+{ term: "Somatic cell", meaning: "یاخته پس همایه ای" },
+{ term: "Precocial cell", meaning: "یاخته پیش همایه ای" },
+{ term: "Synapse", meaning: "همایه" },
+{ term: "Receiver", meaning: "گیرنده" },
+{ term: "Patronage space", meaning: "فضای همایه ای" },
+{ term: "Enzyme", meaning: "انزیم" },
+{ term: "Nervous system", meaning: "دستگاه عصبی" },
+{ term: "Central nervous system", meaning: "دستگاه عصبی مرکزی" },
+{ term: "Monitoring center", meaning: "مرکز نظارت" },
+{ term: "Gray matter", meaning: "ماده خاکستری" },
+{ term: "White matter", meaning: "ماده سفید" },
+{ term: "Myelin", meaning: "میلین" },
+{ term: "Skull bone", meaning: "استخوان جمجمه" },
+{ term: "Vertebral column", meaning: "ستون مهره" },
+{ term: "Connective tissue", meaning: "بافت پیوندی" },
+{ term: "Meninges curtains", meaning: "پرده های مننژ" },
+{ term: "Cerebrospinal fluid", meaning: "مایع مغزی-نخاعی" },
+{ term: "Capillary", meaning: "مویرگ" },
+
+{ term: "Covering tissue", meaning: "بافت پوششی" },
+{ term: "Spinal blood barrier", meaning: "سد خونی نخاعی" },
+{ term: "Blood brain barrier", meaning: "سد خونی مغزی" },
+{ term: "Skeletal structures", meaning: "ساختارهای اسکلتی" },
+{ term: "Muscular structures", meaning: "ساختارهای ماهیچه‌ای" },
+{ term: "Skeletal framework", meaning: "ساختار اسکلت" },
+{ term: "Hydrostatic skeleton", meaning: "اسکلت آب‌ایستایی" },
+{ term: "Exoskeleton", meaning: "اسکلت بیرونی" },
+{ term: "Endoskeleton", meaning: "اسکلت درونی" },
+{ term: "Internal body fluid", meaning: "مایع درون بدن" },
+{ term: "Jellyfish", meaning: "عروس دریایی" },
+{ term: "Insects", meaning: "حشرات" },
+{ term: "Crustaceans", meaning: "سخت‌پوستان" },
+{ term: "Vertebrates", meaning: "مهره‌داران" },
+{ term: "Shark", meaning: "کوسه ماهی" },
+{ term: "Cartilaginous skeleton", meaning: "اسکلت غضروفی" },
+{ term: "Movement", meaning: "حرکت" },
+{ term: "Walking", meaning: "راه رفتن" },
+{ term: "Flying", meaning: "پرواز" },
+{ term: "Swimming", meaning: "شنا کردن" },
+{ term: "Crawling", meaning: "خزیدن" },
+{ term: "Body", meaning: "بدن" },
+{ term: "Bone", meaning: "استخوان" },
+{ term: "Self-defense", meaning: "دفاع از خود" },
+{ term: "Finding food", meaning: "یافتن غذا" },
+{ term: "Escaping predators", meaning: "فرار از شکارچی" },
+{ term: "Predator", meaning: "شکارچی" },
+{ term: "Organs / Body parts", meaning: "اندام‌ها" },
+{ term: "Body support", meaning: "حمایت از بدن" },
+{ term: "Protection of organs", meaning: "محافظت از اندام‌ها" },
+
+{ term: "Brain", meaning: "مغز" },
+{ term: "Spinal cord", meaning: "نخاع" },
+{ term: "Peripheral nervous system", meaning: "دستگاه عصبی محیطی" },
+{ term: "Cranial nerve", meaning: "عصب مغزی" },
+{ term: "Spinal nerve", meaning: "عصب نخاعی" },
+{ term: "Central nervous system", meaning: "دستگاه عصبی مرکزی" },
+{ term: "Sensory organ", meaning: "اندام حسی" },
+{ term: "Muscle", meaning: "ماهیچه" },
+{ term: "Connective tissue", meaning: "بافت پیوندی" },
+{ term: "Sensory part", meaning: "بخش حسی" },
+{ term: "Movement part", meaning: "بخش حرکتی" },
+{ term: "Neural message", meaning: "پیام عصبی" },
+{ term: "Autonomous sector", meaning: "بخش خودمختار" },
+{ term: "Somatic nervous system", meaning: "بخش پیکری" },
+{ term: "Skeletal muscle", meaning: "ماهیچه اسکلتی" },
+{ term: "Skin sensory receptor", meaning: "گیرنده حسی در پوست" },
+{ term: "Triceps brachii", meaning: "ماهیچه سه سر" },
+{ term: "Biceps brachii", meaning: "ماهیچه دو سر" },
+{ term: "Smooth muscle", meaning: "ماهیچه صاف" },
+{ term: "Cardiac muscle", meaning: "ماهیچه قلبی" },
+{ term: "Gland", meaning: "غده" },
+{ term: "Blood pressure", meaning: "فشار خون" },
+{ term: "Heart beat", meaning: "ضربان قلب" },
+{ term: "Pupil", meaning: "مردمک" },
+{ term: "Bronchiol", meaning: "نایژک" },
+{ term: "Bronchus", meaning: "نایژه" },
+{ term: "Glucose", meaning: "گلوکز" },
+{ term: "Bladder", meaning: "مثانه" },
+{ term: "Ventral root of the spinal cord", meaning: "ریشه شکمی نخاع" },
+{ term: "Dorsal root of the spinal cord", meaning: "ریشه پشتی نخاع" },
+{ term: "Sympathetic", meaning: "سمپاتیک، آسیمیک" },
+{ term: "Parasympathetic", meaning: "پاراسمپاتیک، پادآسیمیک" },
+
+{ term: "Auricle", meaning: "لاله گوش" },
+{ term: "Auditory canal", meaning: "مجرای شنوایی" },
+{ term: "Tympanic membrane", meaning: "پرده صماخ" },
+{ term: "Malleus", meaning: "استخوان چکشی" },
+{ term: "Incus", meaning: "استخوان سندانی" },
+{ term: "Stapes", meaning: "استخوان رکابی" },
+{ term: "Temporal bone", meaning: "استخوان گیجگاهی" },
+{ term: "Semicircular canals", meaning: "مجاری نیم دایره ای" },
+{ term: "Cochlear section", meaning: "بخش حلزونی گوش" },
+{ term: "Eustachian tube", meaning: "شیپور استاش" },
+{ term: "Oval window", meaning: "دریچه بیضی" },
+{ term: "Branches of the Auditory Nerve", meaning: "شاخه های عصب شنوایی" },
+{ term: "Maintaining Balance", meaning: "حفظ تعادل" },
+{ term: "Gelatinous substance", meaning: "ماده ژلاتینی" },
+
+{ term: "Bone", meaning: "استخوان" },
+{ term: "Skeleton", meaning: "اسکلت" },
+{ term: "Axial skeleton", meaning: "اسکلت محوری" },
+{ term: "Appendicular skeleton", meaning: "اسکلت جانبی" },
+{ term: "Clavicle", meaning: "ترقوه" },
+{ term: "Sternum", meaning: "جناغ سینه" },
+{ term: "Ribs", meaning: "دنده ها" },
+{ term: "Hemipelvis", meaning: "نیم لگن" },
+{ term: "Femur", meaning: "استخوان ران" },
+{ term: "Patella", meaning: "کشکک" },
+{ term: "Fibula", meaning: "نازک نی" },
+{ term: "Tibia", meaning: "درشت نی" },
+{ term: "Tarsal bone", meaning: "استخوان مچ پا" },
+{ term: "Metatarsal bone", meaning: "استخوان کف پا" },
+{ term: "Phalanx of the foot", meaning: "استخوان انگشتان پا" },
+{ term: "Scapula", meaning: "کتف" },
+{ term: "Humerus", meaning: "استخوان بازو" },
+{ term: "Vertebrae", meaning: "ستون مهره ها" },
+{ term: "Carpal bone", meaning: "استخوان مچ دست" },
+{ term: "Metacarpal bone", meaning: "استخوان کف دست" },
+{ term: "Phalanx of hand", meaning: "استخوان انگشتان دست" },
+{ term: "Auditory ossicles", meaning: "استخوان های کوچک گوش" },
+
+{ term: "Dendrite", meaning: "دندریت" },
+{ term: "Axon", meaning: "آکسون" },
+{ term: "Neuroglia", meaning: "نوروگلیا" },
+{ term: "Neuron", meaning: "یاخته عصبی" },
+{ term: "Nerve fiber", meaning: "رشته عصبی" },
+{ term: "Cell body", meaning: "جسم یاخته ای" },
+{ term: "Myelin sheath", meaning: "غلاف میلین" },
+
+{ term: "Node of Ranvier", meaning: "گره رانویه" },
+{ term: "Sensory neuron", meaning: "یاخته عصبی حسی" },
+{ term: "Motor neuron", meaning: "یاخته عصبی حرکتی" },
+{ term: "Interneuron", meaning: "یاخته عصبی رابط" },
+{ term: "Nerve impulse", meaning: "پیام عصبی" },
+{ term: "Resting potential", meaning: "پتانسیل آرامش" },
+{ term: "Action potential", meaning: "پتانسیل عمل" },
+
+{ term: "Optic chiasma", meaning: "کیاسمای بینایی" },
+{ term: "Pineal gland", meaning: "اپی فیز" },
+{ term: "Triangular connector", meaning: "رابط سه گوش" },
+{ term: "Callus interface", meaning: "رابط پینه ای" },
+{ term: "Striated bodies", meaning: "اجسام مخطط" },
+{ term: "Olfactory lobe", meaning: "لوب بویایی" },
+{ term: "Medulla oblongata", meaning: "بصل النخاع" },
+{ term: "Quadruple prominences", meaning: "برجستگی های چهار گانه" },
+{ term: "Third ventricle", meaning: "بطن سوم" },
+{ term: "Hypothalamus", meaning: "هیپوتالاموس" },
+{ term: "Ciliated cell", meaning: "یاخته مژک دار" },
+{ term: "Gelatin coating", meaning: "پوشش ژلاتینی" },
+{ term: "Mechanical receiver", meaning: "گیرنده مکانیکی" },
+{ term: "Ion channel", meaning: "کانال یونی" },
+{ term: "Ear nerve", meaning: "عصب گوش" },
+{ term: "Auditory receiver", meaning: "گیرنده شنوایی" },
+{ term: "Balance receiver", meaning: "گیرنده تعادل" },
+{ term: "Vestibular part of the ear", meaning: "بخش دهلیزی گوش" },
+{ term: "Semicircular ducts", meaning: "مجاری نیم دایره" },
+{ term: "A sense of balance", meaning: "حس تعادل" },
+{ term: "Olfactory receptor", meaning: "گیرنده بویایی" },
+{ term: "Nasal cavity", meaning: "حفره بینی" },
+{ term: "Fragrant molecule", meaning: "مولکول بودار" },
+{ term: "Olfactory message", meaning: "پیام بویایی" },
+{ term: "Resting state", meaning: "حالت آرامش" },
+{ term: "Sodium ion", meaning: "یون سدیم" },
+{ term: "Potassium ion", meaning: "یون پتاسیم" },
+{ term: "Cell membrane", meaning: "غشای یاخته" },
+{ term: "Protein molecule", meaning: "مولکول پروتئینی" },
+{ term: "Leakage Channels", meaning: "کانال های نشتی" },
+{ term: "Facilitated diffusion", meaning: "انتشار تسهیل شده" },
+{ term: "Sodium-Potassium Pump", meaning: "پمپ سدیم - پتاسیم" },
+{ term: "Potential", meaning: "پتانسیل" },
+{ term: "Flanged Channels", meaning: "کانال های دریچه دار" },
+{ term: "Sodium Valve Channels", meaning: "کانال های دریچه دار سدیمی" },
+{ term: "Potassium Channel Gates", meaning: "کانال دریچه دار پتاسیمی" },
+{ term: "Sensory receptor", meaning: "گیرنده حسی" },
+{ term: "Cell", meaning: "یاخته" },
+{ term: "Nerve impulse / Neural signal", meaning: "پیام عصبی" },
+{ term: "Stimulus", meaning: "محرک" },
+{ term: "Membrane", meaning: "غشا" },
+{ term: "Dendrite", meaning: "دارینه" },
+{ term: "Connective tissue", meaning: "بافت پیوندی" },
+{ term: "Receptor adaptation", meaning: "سازش گیرنده ها" },
+{ term: "Aorta", meaning: "آئورت" },
+{ term: "Retina", meaning: "شبکیه چشم" },
+{ term: "Blood vessel / Vein / Artery", meaning: "رگ" },
+{ term: "Somatic senses", meaning: "حواس پیکری" },
+{ term: "Special senses", meaning: "حواس ویژه" },
+{ term: "Tendon", meaning: "زرد پی" },
+{ term: "Large vein / Vena cava", meaning: "سیاهرگ بزرگ" },
+{ term: "Mechanoreceptor", meaning: "گیرنده مکانیکی" },
+{ term: "Nociceptor / Pain receptor", meaning: "گیرنده درد" },
+{ term: "Pressure receptor", meaning: "گیرنده فشار" },
+{ term: "Thermoreceptor", meaning: "گیرنده دما" },
+{ term: "Touch receptor", meaning: "گیرنده تماس" },
+{ term: "Photoreceptor", meaning: "گیرنده نوری" },
+{ term: "Chemoreceptor", meaning: "گیرنده شیمیایی" },
+        { term: "DNA", meaning: "دی‌ان‌ای" }
+      ]
+    };
+
+    
+
+    function displayWords(list) {
+      wordList.innerHTML = list.map(w => `
+        <div class="word-card">
+          <h3>${w.term}</h3>
+          <p>${w.meaning}</p>
+        </div>
+      `).join("");
+    }
+
+    // Persist/load words to localStorage so added words survive reloads
+    function saveWordsToStorage() {
+      try {
+        localStorage.setItem('wordsData', JSON.stringify(words));
+      } catch (e) {
+        console.warn('Could not save words to localStorage', e);
+      }
+    }
+
+    function loadWordsFromStorage() {
+      try {
+        const raw = localStorage.getItem('wordsData');
+        if (!raw) return;
+        const stored = JSON.parse(raw);
+        if (stored && typeof stored === 'object') {
+          if (Array.isArray(stored.grade10)) words.grade10 = stored.grade10;
+          if (Array.isArray(stored.grade11)) words.grade11 = stored.grade11;
+        }
+      } catch (e) {
+        console.warn('Could not load words from localStorage', e);
+      }
+    }
+
+    // load stored words (if any) before rendering
+    loadWordsFromStorage();
+
+    // search/filter helper
+    function filterWords() {
+      const search = (searchInput.value || "").toLowerCase();
+      const source = (typeof activeList !== 'undefined' && activeList && activeList.length > 0) ? activeList : (words[currentGrade] || []);
+      const filtered = source.filter(w =>
+        (w.term || "").toLowerCase().includes(search) || (w.meaning || "").toLowerCase().includes(search)
+      );
+      displayWords(filtered);
+    }
+
+    searchInput.addEventListener("input", filterWords);
+  </script>
+</body>
+</html>
